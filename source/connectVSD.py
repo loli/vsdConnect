@@ -347,8 +347,8 @@ class VSDConnecter:
         newRel={"position":pos,"type":oType,"object":{"selfUrl":self.url+'/objects/'+str(objectID)},"ontologyItem":{"selfUrl":self.url+"/ontologies/"+str(oType)+"/"+str(oId)}}
         return self.addOntologyRelation(newRel)
             
-    def addLink(self,objectID1,objectID2):
-        link={'object1':{'selfurl':self.url+'/objects/'+str(objectID1)} , 'object2':{'selfurl': self.url+'/objects/'+str(objectID2)}}
+    def addLink(self,objectID1,objectID2,description=""):
+        link={'object1':{'selfurl':self.url+'/objects/'+str(objectID1)} , 'object2':{'selfurl': self.url+'/objects/'+str(objectID2)},'description': description}
         return self.postRequest('/object-links',json.dumps(link))
 
     def getLinkedSegmentation(self,objectID):
