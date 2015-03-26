@@ -12,6 +12,10 @@ import getpass
 
 from poster import encode_multipart
 
+class RequestException(Exception):
+    def __init__(self, message, errors):
+        super(RequestException, self).__init__('{} : Signaled reason: {}'.format(message, errors))
+    
 class Folder:
     name=''
     fullName=''
@@ -71,8 +75,6 @@ class VSDConnecter:
         except urllib2.URLError as err:
             print "Error retrieving object",url,err
             sys.exit()
-       
-
     
     def getRequest(self,request):
         req=urllib2.Request(self.url+request)
