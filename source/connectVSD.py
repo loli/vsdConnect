@@ -344,7 +344,7 @@ class VSDConnecter:
         if obj['ontologyItemRelations'] is not None:
             pos=len(obj['ontologyItemRelations'])
 
-        newRel={"position":pos,"type":oType,"object":{"selfUrl":self.url+'/objects/'+str(objectID)},"ontologyItem":{"selfUrl":self.url+"/ontologies/"+str(oType)+"/"+str(oId)}}
+        newRel={"position":pos,"type":oType,"object":{"selfUrl":self.url+'/objects/'+str(objectID)},"ontologyItem":{"selfUrl":self.url+"/ontologies/"+str(oType)+"/"+str(oID)}}
         return self.addOntologyRelation(newRel)
             
     def addLink(self,objectID1,objectID2,description=""):
