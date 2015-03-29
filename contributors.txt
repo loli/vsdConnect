@@ -1,1 +1,13 @@
 tobiasgass
+Oskar Maier <oskar.maier@googlemail.com>
+- changed error handling to throw exceptions
+- removed interactive user/pwd query from class
+- added method docstrings (numpy/scipy style)
+- started writing nose unit tests
+- added some !TODO items
+- cleaned code
+- changed string concatenation to new / Python3 compatible "".format()
+- changed prints to use the python logging module instead
+- added various spaces
+Planned:
+- change from urrlib2 to requests module

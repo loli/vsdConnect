@@ -3,16 +3,30 @@
 # connectVSD 0.1
 # (c) Tobias Gass, 2015
 
+# system imports
+import os
 import sys
 import urllib2
 import base64
 import json
-import os
-import getpass
+import logging
 
+# third party imports
+
+# own imports
 from poster import encode_multipart
 
-class RequestException(Exception):
+# code
+class ConnectVSDException(Exception):
+    """Default exception for connectVSD module."""
+    pass
+
+class ConnectionException(ConnectVSDException):
+    """Connection or credentials exception."""
+    pass
+
+class RequestException(ConnectVSDException):
+    """Request execution exception."""
     def __init__(self, message, errors):
         super(RequestException, self).__init__('{} : Signaled reason: {}'.format(message, errors))
     
@@ -33,109 +47,70 @@ class Folder:
         return self.fullName
 
 class VSDConnecter:
-    url='https://www.virtualskeleton.ch/api'
+    """
+    Handler providing convenient methods for the Virtual Skeleton Databases REST
+    interface.
+    
+    !TODO: Describe __init__() here.
+    """
+    
+    url = 'https://www.virtualskeleton.ch/api'
    
-    def __init__(self,*args):
-        if (len(args)==0):
-            username=raw_input("Username: ")
-            password=getpass.getpass()
-            self.authstr=base64.encodestring(username+":"+password)
-        elif (len(args)==1):
-            self.authstr=args[0]
+    def __init__(self, username = None, password = None, authstr = None):
+        if not username is None and not password is None:
+            self.authstr = base64.encodestring("{}:{}".format(username, password))
+        elif not authstr is None:
+            self.authstr = authstr
         else:
-            self.authstr=base64.encodestring(args[0]+":"+args[1])
-        print "Authed : "+self.authstr 
+            raise ConnectionException('Either username and password or the authstr parameters must be provided.')
+        
+        logging.info("Authorization string: {}".format(self.authstr))
     
-    def seturl(self,url):
-        self.url=url
+    ################################## MISC ##################################
+    
+    def setUrl(self, url):
+        """Set the server url.
+        
+        Parameters
+        ----------
+        url : string
+        """
+        self.url = url
 
-    def addAuth(self,req):
-        req.add_header("Authorization", "Basic %s" % self.authstr)
+    def addAuth(self, req):
+        """Add the authorization header to a request.
+        
+        Parameters
+        ----------
+        req : urllib2.Request
+            
+        Returns
+        -------
+        req : urllib2.Request
+            The request object with added authorization header.
+        """
+        req.add_header('Authorization', 'Basic {}'.format(self.authstr))
         return req
-
-    def getObject(self,ID):
-        print self.url+"/objects/"+str(ID)
-        req=urllib2.Request(self.url+"/objects/"+str(ID))
-        self.addAuth(req)
-        result=""
-        try:
-            result=urllib2.urlopen(req)
-            return json.load(result)
-
-        except urllib2.URLError as err:
-            print "Error retrieving object",ID,err
-            #sys.exit()
-
-    def getObjectByUrl(self,url):
-        req=urllib2.Request(url)
-        self.addAuth(req)
-        try:
-            result=urllib2.urlopen(req)
-            return json.load(result)
-        except urllib2.URLError as err:
-            print "Error retrieving object",url,err
-            sys.exit()
     
-    def getRequest(self,request):
-        req=urllib2.Request(self.url+request)
-        self.addAuth(req)
-        try:
-            result=urllib2.urlopen(req)
-            return json.load(result)
+    
+    ################################## REST-METHODS ##################################
 
-        except urllib2.URLError as err:
-            print "Error retrieving request",req,"from SMIR:",err
-            #sys.exit()
-
-    def optionsRequest(self,request):
-        req=urllib2.Request(self.url+request)
-        self.addAuth(req)
-        req.get_method = lambda: 'OPTIONS' 
-        try:
-            result=urllib2.urlopen(req).read()
-            return json.load(result)
-
-        except urllib2.URLError as err:
-            print "Error retrieving request",req,"from SMIR:",err
-            #sys.exit()
-
-    def postRequest(self,request,data):
-        req=urllib2.Request(self.url+request,data,headers={'Content-Type': 'application/json'})
-        self.addAuth(req)
-        req.get_method = lambda: 'POST' 
-        result=''
-        #print req.get_full_url(), req.header_items()
-        try:
-            result=urllib2.urlopen(req)
-            return json.load(result)
-
-        except urllib2.URLError as err:
-            print "Error retrieving request",req,"from SMIR:",err
-            #sys.exit()
-
-    def putRequest(self,request,data):
-        req=urllib2.Request(self.url+request,data,headers={'Content-Type': 'application/json'})
-        self.addAuth(req)
-        req.get_method = lambda: 'PUT' 
-       # print req.get_header()
-        try:
-            result=urllib2.urlopen(req)
-            return json.load(result)
-        except urllib2.URLError as err:
-            print "Error putting request",req,"from SMIR:",err
-            #sys.exit()
-
-    def putRequestSimple(self,request):
-        req=urllib2.Request(self.url+request)
-        self.addAuth(req)
-        req.get_method = lambda: 'PUT' 
-       # print req.get_header()
-        try:
-            result=urllib2.urlopen(req)
-            return json.load(result)
-        except urllib2.URLError as err:
-            print "Error retrieving request",req,"from SMIR:",err
-            #sys.exit()
+    def getObject(self, oid):
+        """Get the JSON description of a single object.
+        
+        Paramters
+        ---------
+        oid : int
+            The objects id.
+            
+        Returns
+        -------
+        objjson : dict
+            The object described by a dict constructed from the servers JSON
+            response.
+        """
+        #!TODO: What happens if the id is wrong? Will there still be some value returned.
+        return self.getRequest('/objects/{}'.format(oid))
 
     def generateBaseFilenameFromOntology(self,ID,prefix=""):
         fileObject=self.getObject(ID)
@@ -336,7 +311,7 @@ class VSDConnecter:
 
     def addOntologyRelation(self,ontologyRelation):
         oType=ontologyRelation["type"]
-        result=self.postRequest('/object-ontologies/'+str(oType),json.dumps(ontologyRelation))
+        result=self.postRequest('/object-ontologies/'+str(oType), json.dumps(ontologyRelation))
         #result2=self.putRequestSimple("/object-ontologies/"+str(oType)+"/"+str(result["id"]))
         return result
 
@@ -347,6 +322,7 @@ class VSDConnecter:
             pos=len(obj['ontologyItemRelations'])
 
         newRel={"position":pos,"type":oType,"object":{"selfUrl":self.url+'/objects/'+str(objectID)},"ontologyItem":{"selfUrl":self.url+"/ontologies/"+str(oType)+"/"+str(oID)}}
+        print newRel
         return self.addOntologyRelation(newRel)
             
     def addLink(self,objectID1,objectID2,description=""):
@@ -449,8 +425,88 @@ class VSDConnecter:
                 self.postRequest("/object-user-rights",json.dumps(newRight))
                                        
         
-     
+    ################################## REQUESTS ##################################
         
+    def getRequest(self, request):
+        """Execute a single GET request on the server.
+        
+        Parameters
+        ----------
+        request : string
+        
+        Returns
+        -------
+        response : dict
+            The server response interpreted as JSON object.
+        """
+        req = urllib2.Request('{}/{}'.format(self.url, request))
+        return self.__execute_request(req)
+
+    def optionsRequest(self, request):
+        """Execute a single OPTIONS request on the server.
+        
+        Parameters
+        ----------
+        request : string
+        
+        Returns
+        -------
+        response : dict
+            The server response interpreted as JSON object.
+        """
+        req = urllib2.Request('{}/{}'.format(self.url, request))
+        req.get_method = lambda: 'OPTIONS' 
+        return self.__execute_request(req)
+
+    def postRequest(self, request, data):
+        """Execute a single POST request on the server.
+        
+        Parameters
+        ----------
+        request : string
+        data : string
+            A string containing data in JSON format.
+        
+        Returns
+        -------
+        response : dict
+            The server response interpreted as JSON object.
+        """
+        req = urllib2.Request('{}/{}'.format(self.url, request),
+                              data, headers={'Content-Type': 'application/json'})
+        req.get_method = lambda: 'POST' 
+        return self.__execute_request(req)
+
+    def putRequest(self, request, data = None):
+        """Execute a single PUT request on the server.
+        
+        Parameters
+        ----------
+        request : string
+        data : string
+            A string containing data in JSON format.
+        
+        Returns
+        -------
+        response : dict
+            The server response interpreted as JSON object.
+        """        
+        if data is None:
+            req = urllib2.Request('{}/{}'.format(self.url, request))
+        else:
+            req = urllib2.Request('{}/{}'.format(self.url, request),
+                                  data, headers={'Content-Type': 'application/json'})
+        req.get_method = lambda: 'PUT' 
+        return self.__execute_request(req)
+        
+    def __execute_request(self, req):
+        """Send a request to the server."""
+        self.addAuth(req)
+        try:
+            result = urllib2.urlopen(req)
+            return json.load(result)
+        except urllib2.URLError as err:
+            raise RequestException('Error executing {} request {}'.format(req.get_method(), req.get_full_url()), err)
 
 
  
