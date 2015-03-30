@@ -2,6 +2,7 @@
 
 # connectVSD 0.1
 # (c) Tobias Gass, 2015
+# API documentation: https://demo.virtualskeleton.ch/api/Help/
 
 # system imports
 import os
@@ -95,11 +96,28 @@ class VSDConnecter:
     
     ################################## REST-METHODS ##################################
 
+    def getBySelfUrl(self, selfurl):
+        """Get the JSON description of a single resource.
+        
+        Parameters
+        ----------
+        selfurl : string
+            The selfUrl identifier.
+            
+        Returns
+        -------
+        objjson : dict
+            The object behind the url described by a dict constructed from
+            the servers JSON response.
+        """
+        req = urllib2.Request(selfurl)
+        return self.__execute_request(req)
+
     def getObject(self, oid):
         """Get the JSON description of a single object.
         
-        Paramters
-        ---------
+        Parameters
+        ----------
         oid : int
             The objects id.
             
@@ -111,6 +129,128 @@ class VSDConnecter:
         """
         #!TODO: What happens if the id is wrong? Will there still be some value returned.
         return self.getRequest('/objects/{}'.format(oid))
+
+    def uploadFile(self, filename):
+        """Upload a file.
+        
+        Parameters
+        ----------
+        filename : string
+            Path to the file to upload.
+            
+        Returns
+        -------
+        objjson : dict
+            The server response as JSON dict.
+        """
+        fields={}
+        files={'file':{ 'filename' : filename, 'content': open(filename, "rb").read()}}
+        data, headers = encode_multipart(fields, files)
+        req = urllib2.Request('{}/upload'.format(self.url), data, headers)
+        return self.__execute_request(req)
+    
+    def deleteObject(self, oid):
+        """Delete an (unpublished) object.
+        
+        Parameters
+        ----------
+        oid : int
+            The objects id.
+        """
+        return self.deleteRequest('/objects/{}'.format(oid))
+    
+    def getFolder(self, fid):
+        """Get the JSON description of a single object.
+        
+        Parameters
+        ----------
+        fid : int
+            The folders id.
+            
+        Returns
+        -------
+        Returns
+        -------
+        objjson : dict
+            The folder described by a dict constructed from the servers JSON
+            response.
+        """
+        return self.getRequest('/folders/{}'.format(fid))
+    
+    def addObjectToFolder(self, oid, fid):
+        """Add an object to an folder.
+        
+        Parameters
+        ----------
+        oid : int
+            The objects id.
+        fid : int
+            The folders id.
+            
+        Returns
+        -------
+        objjson : dict
+            The server response as JSON dict.
+        """
+        folder = self.getFolder(fid)
+        entry = {'selfUrl': '{}/objects/{}'.format(fid, oid)}
+        if folder['containedObjects'] is not None:
+            folder['containedObjects'].append(entry)
+        else:
+            folder['containedObjects'] = [entry]
+        return self.putRequest('/folders', json.dumps(folder))    
+
+    def addOntology(self, oid, ontotype, ontoid):
+        """Add an ontoloy to an object.
+        
+        Parameters
+        ----------
+        oid : int
+            The objects id.
+        ontotype : int
+            The ontology type.
+        ontoid : int
+            The ontology id.
+            
+        Returns
+        -------
+        objjson : dict
+            The server response as JSON dict.
+        """
+        obj = self.getObject(oid)
+        pos = 0
+        if obj['ontologyItemRelations'] is not None:
+            pos = len(obj['ontologyItemRelations'])
+
+        onto_relation = {'position': pos,
+                         'type': ontotype,
+                         'object': {'selfUrl': '{}/objects/{}'.format(self.url, oid)},
+                         'ontologyItem': {'selfUrl': '{}/ontologies/{}/{}'.format(self.url, ontotype, ontoid)}}
+        return self.postRequest('/object-ontologies/{}'.format(ontotype), json.dumps(onto_relation))
+
+    def addLink(self, oid1, oid2, description = ""): # !TODO: description is accepted, but does not seem to be settable
+        """Create a link between two objects.
+        
+        Parameters
+        ----------
+        oid1 : int
+            The first objects id.
+        oid2 : int
+            The second objects id.
+        description : string
+            Optional description for the link.
+    
+        Returns
+        -------
+        Returns
+        -------
+        objlinksjson : dict
+            The server response as JSON dict.
+        """
+        link = {'object1': {'selfUrl': '{}/objects/{}'.format(self.url, oid1)},
+                'object2': {'selfUrl': '{}/objects/{}'.format(self.url, oid2)},
+                'description': description}
+        return self.postRequest('/object-links', json.dumps(link))
 
     def generateBaseFilenameFromOntology(self,ID,prefix=""):
         fileObject=self.getObject(ID)
@@ -197,42 +337,7 @@ class VSDConnecter:
                     local_file.close()
             
 
-    def getFolderList(self):
-        #print self.url+"/folders"
-        req=urllib2.Request(self.url+"/folders?rpp=500")
-        self.addAuth(req)
-        result=""
-        try:
-            result=json.load(urllib2.urlopen(req))
-            #result=urllib2.urlopen(req)
-            return result
-        except urllib2.URLError as err:
-            print "Error retrieving folders from SMIR:",err
-            sys.exit()
-    
-    def getFolder(self,ID):
-        #print self.url+"/folders"
-        req=urllib2.Request(self.url+"/folders/"+str(ID))
-        self.addAuth(req)
-        result=""
-        try:
-            result=json.load(urllib2.urlopen(req))
-            return result
-        except urllib2.URLError as err:
-            print "Error retrieving folder",ID," from SMIR:",err
-            sys.exit()
 
-    def getFileListInFolder(self,ID):
-        #print self.url+"/folders"
-        req=urllib2.Request(self.url+"/folders/"+str(ID))
-        self.addAuth(req)
-        result=""
-        try:
-            result=json.load(urllib2.urlopen(req))
-            return result
-        except urllib2.URLError as err:
-            print "Error retrieving file list for folder",ID,"from SMIR:",err
-            sys.exit()
         
 
     ##read folder list into linked Folder datastructure
@@ -277,57 +382,8 @@ class VSDConnecter:
             ID=fileObject['selfUrl'].split("/")[-1]
             fileIDList.append(ID)
         return fileIDList
-
-    def uploadFile(self,filenam):
-        #register_openers()
-        fields={}
-        try:
-            files={'file':{ 'filename' : filenam, 'content':open(filenam,"rb").read()}}
-        except:
-            print "opening file",filenam,"failed, aborting"
-            return
-        data,headers=encode_multipart(fields,files)
-        req=urllib2.Request(self.url+"/upload",data,headers)
-        self.addAuth(req)
-        try:
-            result=urllib2.urlopen(req)
-            return json.load(result)
-        except urllib2.URLError as err:
-            print "Error uploading",filenam,err
-            #sys.exit()
-
-    def addFileToFolder(self,fileID,folderID):
-        #get folder object
-        folder=self.getFolder(folderID)
-        entry={'selfUrl' : self.url+'/objects/'+str(fileID)}
-        if folder['containedObjects'] is not None:
-            folder['containedObjects'].append(entry)
-        else:
-            folder['containedObjects']=[]
-            folder['containedObjects'].append(entry)
-        #print folder
-        return self.putRequest('/folders',json.dumps(folder))
-        
-
-    def addOntologyRelation(self,ontologyRelation):
-        oType=ontologyRelation["type"]
-        result=self.postRequest('/object-ontologies/'+str(oType), json.dumps(ontologyRelation))
-        #result2=self.putRequestSimple("/object-ontologies/"+str(oType)+"/"+str(result["id"]))
-        return result
-
-    def addOntologyByTypeAndID(self,objectID,oType,oID):
-        obj=self.getObject(objectID)
-        pos=0
-        if obj['ontologyItemRelations'] is not None:
-            pos=len(obj['ontologyItemRelations'])
-
-        newRel={"position":pos,"type":oType,"object":{"selfUrl":self.url+'/objects/'+str(objectID)},"ontologyItem":{"selfUrl":self.url+"/ontologies/"+str(oType)+"/"+str(oID)}}
-        print newRel
-        return self.addOntologyRelation(newRel)
             
-    def addLink(self,objectID1,objectID2,description=""):
-        link={'object1':{'selfurl':self.url+'/objects/'+str(objectID1)} , 'object2':{'selfurl': self.url+'/objects/'+str(objectID2)},'description': description}
-        return self.postRequest('/object-links',json.dumps(link))
+
 
     def getLinkedSegmentation(self,objectID):
         result=None
@@ -498,13 +554,27 @@ class VSDConnecter:
                                   data, headers={'Content-Type': 'application/json'})
         req.get_method = lambda: 'PUT' 
         return self.__execute_request(req)
+    
+    def deleteRequest(self, request):
+        """Execute a single DELETE request on the server.
         
-    def __execute_request(self, req):
+        Parameters
+        ----------
+        request : string
+        """
+        req = urllib2.Request('{}/{}'.format(self.url, request))
+        req.get_method = lambda: 'DELETE' 
+        self.__execute_request(req, return_json = False)    
+        
+    def __execute_request(self, req, return_json = True):
         """Send a request to the server."""
         self.addAuth(req)
         try:
             result = urllib2.urlopen(req)
-            return json.load(result)
+            if return_json:
+                return json.load(result)
+            else:
+                return
         except urllib2.URLError as err:
             raise RequestException('Error executing {} request {}'.format(req.get_method(), req.get_full_url()), err)
 

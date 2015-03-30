@@ -4,8 +4,8 @@
 
 import urllib2
 import base64
+import sys
 
-from nose import with_setup
 from nose.tools import assert_raises
 
 import connectVSD
@@ -16,9 +16,14 @@ class TestConnectVSD:
     __password = "demo"
     __server = "https://demo.virtualskeleton.ch/api"
     
+    __testfolder = 38 # e.g. myprojects-folder
+    
     __dummyusername = "user"
     __dummypassword = "password"
     __dummyserver = "http://www.google.de"
+    
+    __testfile = "tests/resources/image.nii"
+    __testfile_invalid = "tests/resources/image.xyz"
     
     connection = None
     
@@ -67,9 +72,45 @@ class TestConnectVSD:
         assert req.get_header('Authorization') is not None
         assert self.connection.authstr in req.get_header('Authorization')
         
+    def test_uploadFile(self):
+        resp = self.connection.uploadFile(self.__testfile)
+        assert resp is not None
+        
+        with assert_raises(connectVSD.RequestException):
+            self.connection.uploadFile(self.__testfile_invalid)
+        
     def test_getObject(self):
-        # first: create object
-        # then: get object
-        pass
-    
+        resp1 = self.connection.uploadFile(self.__testfile)
+        oid = resp1['relatedObject']['selfUrl'].split('/')[-1]
+        resp2 = self.connection.getObject(oid)
+        assert resp2 is not None
+        assert int(oid) == resp2['id']
+        
+        with assert_raises(connectVSD.RequestException):
+            self.connection.getObject(sys.maxint)
+        
+    def test_deleteObject(self):
+        resp1 = self.connection.uploadFile(self.__testfile)
+        oid = resp1['relatedObject']['selfUrl'].split('/')[-1]
+        self.connection.deleteObject(oid)
+        
+        with assert_raises(connectVSD.RequestException):
+            self.connection.deleteObject(sys.maxint)
+            
+    def test_getFolder(self):
+        resp = self.connection.getFolder(self.__testfolder)
+        assert resp is not None
+        assert self.__testfolder == resp['id']
+        
+        with assert_raises(connectVSD.RequestException):
+            self.connection.getFolder(sys.maxint)
+            
+    def test_addLink(self):
+        resp1 = self.connection.uploadFile(self.__testfile)
+        oid1 = resp1['relatedObject']['selfUrl'].split('/')[-1]
+        resp2 = self.connection.uploadFile(self.__testfile)
+        oid2 = resp2['relatedObject']['selfUrl'].split('/')[-1]
+        resp3 = self.connection.addLink(oid1, oid2, description = "xxx")
+        assert resp3 is not None
+        
     
